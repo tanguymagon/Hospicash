@@ -13,13 +13,13 @@ pio.renderers.default = 'iframe'
 # User_ID defined - so that when import a file, the path can be changed dynamically. 
 user_id = 'chtam'
 
-ukdf=pd.read_csv("C:/Users/"+ user_id + "/OneDrive - SiriusPoint/Life Folders/03 Pricing/1. Benchmarks/7. Hospital Cash/UK/Data/UK_data_for_webapp.csv")
-mxdf=pd.read_csv("C:/Users/"+ user_id + "/OneDrive - SiriusPoint/Life Folders/03 Pricing/1. Benchmarks/7. Hospital Cash/Mexico/Output Data Mexico/Mexico_data_for_webapp.csv")
-mx_pop_disc=pd.read_csv("C:/Users/"+ user_id + "/OneDrive - SiriusPoint/Life Folders/03 Pricing/1. Benchmarks/7. Hospital Cash/Mexico/Output Data Mexico/Population_and_discharge_mexico.csv")
+ukdf=pd.read_csv("Data/UK/UK_data_for_webapp.csv")
+mxdf=pd.read_csv("Data/Mexico/Mexico_data_for_webapp.csv")
+mx_pop_disc=pd.read_csv("Data/Mexico/Population_and_discharge_mexico.csv")
 mx_pop_disc=mx_pop_disc[mx_pop_disc['Edad']!='N.A.']
 mx_pop_disc['Discharge Rate']=mx_pop_disc['Discharge Rate'].astype(float)
-df_pop = pd.read_excel("C:/Users/"+ user_id + "/OneDrive - SiriusPoint/Life Folders/03 Pricing/1. Benchmarks/7. Hospital Cash/UK/Data/Pop_Data_England_Age_Sexe.xlsx")
-data_admission=pd.read_excel("C:/Users/"+ user_id + "/OneDrive - SiriusPoint/Life Folders/03 Pricing/1. Benchmarks/7. Hospital Cash/UK/Data/Admissions.xlsx")[['Year', 'Emergency', 'Planned','Waiting list', 'Other Admission Method']]
+df_pop = pd.read_excel("Data/UK/Pop_Data_England_Age_Sexe.xlsx")
+data_admission=pd.read_excel("Data/UK/Admissions.xlsx")[['Year', 'Emergency', 'Planned','Waiting list', 'Other Admission Method']]
 
 
 
@@ -360,7 +360,7 @@ def get_base64_of_bin_file(bin_file):
     return base64.b64encode(data).decode()
 
 ################ logo and Background #################
-logo_image_path = "C:/Users/"+ user_id +"/OneDrive - SiriusPoint/Life Folders/03 Pricing/1. Benchmarks/7. Hospital Cash/Streamlit App/app/siriuspt_logo.jpg"
+logo_image_path = "siriuspt_logo.jpg"
 
 # Encoding the logo image
 logo_base64 = get_base64_of_bin_file(logo_image_path)
