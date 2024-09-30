@@ -15,6 +15,7 @@ user_id = 'chtam'
 
 ukdf=pd.read_csv("Data/UK/UK_data_for_webapp.csv")
 mxdf=pd.read_csv("Data/Mexico/Mexico_data_for_webapp.csv")
+bodf=pd.read_csv("Data/Bolivia/webapp_data_map_bolivia.csv", sep=';')
 mx_pop_disc=pd.read_csv("Data/Mexico/Population_and_discharge_mexico.csv")
 mx_pop_disc=mx_pop_disc[mx_pop_disc['Edad']!='N.A.']
 mx_pop_disc['Discharge Rate']=mx_pop_disc['Discharge Rate'].astype(float)
@@ -42,6 +43,16 @@ for year, group in mxdf.groupby('year'):
         'Discharge Rate': list(group['Discharge Rate']),
     }
     
+bodf_dic = {}
+for year, group in bodf.groupby('year'):
+    bodf_dic[year] = {
+        'Region': list(group['Region']),
+        'Avg. days of stay': list(group['Avg. days of stay']),
+        'No. of Discharges': list(group['No. of Discharges']),
+        'Pop.': list(group['Pop.']),
+        'Discharge Rate': list(group['Discharge Rate']),
+    }
+
 def generate_yearly_data(year, num_regions):
     variation = (year - 2015) * 0.1
     return {
@@ -76,9 +87,18 @@ country_data = {
         "lat": 23,
         "lon": -102,
         "data": mxdf_dic
+    },
+        "Bolivia": {
+        "regions": ["El Beni", "Chuquisaca", "Cochabamba", "La Paz", "Oruro", "Pando", "Potosí", "Santa Cruz", "Tarija", "Bolivia"],
+        "repo": "https://raw.githubusercontent.com/tanguymagon/Hospicash/refs/heads/main/Data/bo.json",
+        "lat": -17,
+        "lon": -65,
+        "data": bodf_dic
     }
+
     # Add other countries in a similar manner...
 }
+
 
 country_data_graphes = {
     "UK": {
@@ -102,8 +122,24 @@ country_data_graphes = {
     }
 
 
+def generate_excel_download(dataframe):
+    # Create an in-memory buffer
+    output = io.BytesIO()
+    
+    # Write the DataFrame to the buffer in Excel format
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        pd.DataFrame(dataframe).to_excel(writer, index=False)
+    
+    # Seek to the beginning of the stream
+    output.seek(0)
+    
+    # Return the Excel file as a binary stream
+    return output
 
 ####################### MAP FUNCTION : DOES NOT WORK FOR NOW #################################
+
+
+
 def get_country_map(country, selected_year):
     country_df = pd.DataFrame({
         "Region": country_data[country]["data"][selected_year]["Region"],
@@ -171,7 +207,7 @@ def get_country_map(country, selected_year):
         height=800,
         width=800,
         hoverlabel=dict(
-            font_size=16,            # Font size of the text in the tooltip
+            font_size=16,           # Font size of the text in the tooltip
             font_family="Arial",     # Font family of the text in the tooltip
         )
     )
@@ -190,15 +226,30 @@ def get_country_map(country, selected_year):
     else:
         repo_url = country_data[country]["repo"]
         res = requests.get(repo_url)
-        fig = px.choropleth_mapbox(country_df, locations="Region", color="Average Length of Stay",
-                                   geojson=res.json(), featureidkey="properties.name", hover_name="Region",
+        fig = px.choropleth_mapbox(country_df, 
+                                   locations="Region", 
+                                   color="No. of Discharges",
+                                   geojson=res.json(), 
+                                   featureidkey="properties.name", 
+                                   hover_name="Region",
+                                   hover_data=country_df.columns.to_list(),
                                    color_continuous_scale="Blues",
                                    range_color=(0, None),
                                    mapbox_style="carto-positron",
-                                   zoom=3, center={"lat": country_data[country]["lat"], "lon": country_data[country]["lon"]},
+                                   zoom=5, 
+                                   center={"lat": country_data[country]["lat"], "lon": country_data[country]["lon"]},
                                    opacity=0.5
                                   )
-    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=800, width=800)
+                    # NEWLY ADDED 
+        fig.update_layout(
+        margin={"r":0, "t":0, "l":0, "b":0},
+        height=800,
+        width=800,
+        hoverlabel=dict(
+            font_size=16,            # Font size of the text in the tooltip
+            font_family="Arial",     # Font family of the text in the tooltip
+        )
+    )
     return fig
 
 ##################################### TITLE APP CONFIG ##############################################################
@@ -227,137 +278,159 @@ else:
     st.markdown(f"## Insights for {selected_country} in {selected_year}")
 
 #--------------------------------------------------------------------------------------------------------------------------------------------- 
-    # Map section
+# Map section
+excel_data = generate_excel_download(country_data[selected_country]["data"])
+col1, col2 = st.columns([3, 1])
+
+with col1:
     st.markdown("### Average Length of Stay by Region")
-    map_fig = get_country_map(selected_country, selected_year)
-    st.plotly_chart(map_fig, use_container_width=True)
-#--------------------------------------------------------------------------------------------------------------------------------------------- 
-    # Avg. lengths of stay over the years 
-    # Dropdown menu to select a region
-    st.markdown("### Average Length of Stay by Region Over Years")
-    years = list(country_data[selected_country]["data"].keys())
-    regions = country_data[selected_country]["regions"]
-    if selected_country =='UK':
-        default_placeholder='England'
-    elif selected_country=='Mexico':
-        default_placeholder='México (all states)'
-    selected_region = st.selectbox("Select a region", regions, index=regions.index(default_placeholder))
-    
-    # Prepare data for the selected region across all years
-    avg_length_of_stay = []
-    for year in years:
-        # Get the index of the selected region for the given year
-        region_index = country_data[selected_country]["data"][year]['Region'].index(selected_region)
-        # Append the average length of stay for that region and year
-        avg_length_of_stay.append(country_data[selected_country]["data"][year]['Avg. days of stay'][region_index])
-    
-    # Plotting the average length of stay over the years for the selected region
-    fig_length_stay = px.bar(x=years, y=avg_length_of_stay,
-                             labels={"x": "Year", "y": "Average Length of Stay (days)"},
-                             title=f"Average Length of Stay Over Years in {selected_region}",
-                             color_discrete_sequence=["#0077b6"])
-    fig_length_stay.update_yaxes(range=[min(avg_length_of_stay)-0.5, max(avg_length_of_stay)+0.5])
-    st.plotly_chart(fig_length_stay, use_container_width=True)
-#--------------------------------------------------------------------------------------------------------------------------------------------- 
-    if selected_country=="UK":
-        age_order = ["Age 0", "Age 1-4", "Age 5-9", "Age 10-14", "Age 15-19", "Age 20-24",
-                     "Age 25-29", "Age 30-34", "Age 35-39", "Age 40-44", "Age 45-49",
-                     "Age 50-54", "Age 55-59", "Age 60-64", "Age 65-69", "Age 70-74",
-                     "Age 75-79", "Age 80-84", "Age 85-89", "Age 90+"]
-    elif selected_country=="Mexico":
-        age_order= list(mx_pop_disc["Edad"].unique())
 
-    # Admission Rate by Age
-    st.markdown("### Admission Rate by Age")
-    if selected_year not in list(country_data_graphes["UK"]["data"].keys()):
+with col2:
+    st.download_button(
+    label="Download data",
+    data=excel_data,
+    file_name=f'{selected_country}_data_{selected_year}.xlsx',
+    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+)
+
+
+# Add download button for the Excel file
+
+
+
+map_fig = get_country_map(selected_country, selected_year)
+st.plotly_chart(map_fig, use_container_width=True)
+#--------------------------------------------------------------------------------------------------------------------------------------------- 
+# Avg. lengths of stay over the years 
+# Dropdown menu to select a region
+st.markdown("### Average Length of Stay by Region Over Years")
+years = list(country_data[selected_country]["data"].keys())
+regions = country_data[selected_country]["regions"]
+if selected_country =='UK':
+    default_placeholder='England'
+elif selected_country=='Mexico':
+    default_placeholder='México (all states)'
+elif selected_country =='Bolivia':
+    default_placeholder='Bolivia'
+selected_region = st.selectbox("Select a region", regions, index=regions.index(default_placeholder))
+
+
+# Prepare data for the selected region across all years
+avg_length_of_stay = []
+for year in years:
+    # Get the index of the selected region for the given year
+    region_index = country_data[selected_country]["data"][year]['Region'].index(selected_region)
+    # Append the average length of stay for that region and year
+    avg_length_of_stay.append(country_data[selected_country]["data"][year]['Avg. days of stay'][region_index])
+
+# Plotting the average length of stay over the years for the selected region
+fig_length_stay = px.bar(x=years, y=avg_length_of_stay,
+                            labels={"x": "Year", "y": "Average Length of Stay (days)"},
+                            title=f"Average Length of Stay Over Years in {selected_region}",
+                            color_discrete_sequence=["#0077b6"])
+fig_length_stay.update_yaxes(range=[min(avg_length_of_stay)-0.5, max(avg_length_of_stay)+0.5])
+st.plotly_chart(fig_length_stay, use_container_width=True)
+#--------------------------------------------------------------------------------------------------------------------------------------------- 
+if selected_country=="UK":
+    age_order = ["Age 0", "Age 1-4", "Age 5-9", "Age 10-14", "Age 15-19", "Age 20-24",
+                    "Age 25-29", "Age 30-34", "Age 35-39", "Age 40-44", "Age 45-49",
+                    "Age 50-54", "Age 55-59", "Age 60-64", "Age 65-69", "Age 70-74",
+                    "Age 75-79", "Age 80-84", "Age 85-89", "Age 90+"]
+elif selected_country=="Mexico":
+    age_order= list(mx_pop_disc["Edad"].unique())
+
+# Admission Rate by Age
+st.markdown("### Admission Rate by Age")
+if selected_year not in list(country_data_graphes["UK"]["data"].keys()):
+    st.markdown("No data available for plotting for this year.")
+else:
+    admission_rate_df = country_data_graphes[selected_country]["data"][selected_year]["admission_rate_age_gender"]
+    admission_rate_df['Age'] = pd.Categorical(admission_rate_df['Age'], categories=age_order, ordered=True)
+    admission_rate_df = admission_rate_df.sort_values('Age')
+    
+    
+    fig_admission = px.bar(admission_rate_df, x="Age", y="Admission Rate",
+                            labels={"Admission Rate": "Admission Rate", "Age": "Age Range"},
+                            text=admission_rate_df["Admission Rate"].apply(lambda x: f'{x*100:.2f}%'),
+                            color_discrete_sequence=["#0077b6"])
+    
+    st.plotly_chart(fig_admission, use_container_width=True)
+#--------------------------------------------------------------------------------------------------------------------------------------------- 
+# Average length of stay by age and gender
+
+st.markdown("### Number of Admissions and population by age")
+if selected_year not in list(country_data_graphes["UK"]["data"].keys()):
+    st.markdown("No data available for plotting for this year.")
+else:
+    data_df_pop = country_data_graphes[selected_country]["data"][selected_year]["population_and_admissions"]
+
+    # Convert the 'Age' column to a categorical type with the specified order
+    data_df_pop['Age'] = pd.Categorical(data_df_pop['Age'], categories=age_order, ordered=True)
+    data_df_pop = data_df_pop.sort_values('Age')
+    # Reshape the DataFrame for a grouped bar plot
+    melted_df = data_df_pop.melt(id_vars=["Age"], value_vars=["population", "admissions"], 
+                                var_name="Category", value_name="Count")
+    
+    fig_grouped_bar = px.bar(melted_df, x="Age", y="Count", color="Category", barmode="group",
+                                labels={"Count": "Count", "Age": "Age Range", "Category": "Type"},
+                                color_discrete_sequence=["#0077b6", "#ced4da"])
+    
+    st.plotly_chart(fig_grouped_bar, use_container_width=True)
+#--------------------------------------------------------------------------------------------------------------------------------------------- 
+# Waterfall chart for admission methods
+if selected_country == 'UK':
+    st.markdown("### Waterfall Chart of Admission Methods")
+    if selected_year not in list(data_admission['Year']):
         st.markdown("No data available for plotting for this year.")
     else:
-        admission_rate_df = country_data_graphes[selected_country]["data"][selected_year]["admission_rate_age_gender"]
-        admission_rate_df['Age'] = pd.Categorical(admission_rate_df['Age'], categories=age_order, ordered=True)
-        admission_rate_df = admission_rate_df.sort_values('Age')
-        
-        
-        fig_admission = px.bar(admission_rate_df, x="Age", y="Admission Rate",
-                               labels={"Admission Rate": "Admission Rate", "Age": "Age Range"},
-                               text=admission_rate_df["Admission Rate"].apply(lambda x: f'{x*100:.2f}%'),
-                               color_discrete_sequence=["#0077b6"])
-        
-        st.plotly_chart(fig_admission, use_container_width=True)
-#--------------------------------------------------------------------------------------------------------------------------------------------- 
-    # Average length of stay by age and gender
-
-    st.markdown("### Number of Admissions and population by age")
-    if selected_year not in list(country_data_graphes["UK"]["data"].keys()):
-        st.markdown("No data available for plotting for this year.")
-    else:
-        data_df_pop = country_data_graphes[selected_country]["data"][selected_year]["population_and_admissions"]
+        # Filter data for the selected year
+        filtered_data = data_admission[data_admission['Year'] == selected_year].iloc[0, 1:]  # Exclude the 'Year' column
     
-        # Convert the 'Age' column to a categorical type with the specified order
-        data_df_pop['Age'] = pd.Categorical(data_df_pop['Age'], categories=age_order, ordered=True)
-        data_df_pop = data_df_pop.sort_values('Age')
-        # Reshape the DataFrame for a grouped bar plot
-        melted_df = data_df_pop.melt(id_vars=["Age"], value_vars=["population", "admissions"], 
-                                 var_name="Category", value_name="Count")
-        
-        fig_grouped_bar = px.bar(melted_df, x="Age", y="Count", color="Category", barmode="group",
-                                 labels={"Count": "Count", "Age": "Age Range", "Category": "Type"},
-                                 color_discrete_sequence=["#0077b6", "#ced4da"])
-        
-        st.plotly_chart(fig_grouped_bar, use_container_width=True)
-#--------------------------------------------------------------------------------------------------------------------------------------------- 
-    # Waterfall chart for admission methods
-    if selected_country == 'UK':
-        st.markdown("### Waterfall Chart of Admission Methods")
-        if selected_year not in list(data_admission['Year']):
-            st.markdown("No data available for plotting for this year.")
-        else:
-            # Filter data for the selected year
-            filtered_data = data_admission[data_admission['Year'] == selected_year].iloc[0, 1:]  # Exclude the 'Year' column
-        
-            # Prepare data for the waterfall chart
-            categories = filtered_data.index.tolist()
-            values = filtered_data.values.tolist()
-            bar_colors = ['#0077b6', '#0077b6', '#0077b6', '#0077b6', '#0077b6']
-            waterfall_values = [values[0]] + [values[i] for i in range(1, len(values))] + [sum(values)]
-            waterfall_labels = categories + ['Total Admissions']
-        
-            # Create the waterfall chart
-            fig_waterfall = go.Figure(go.Waterfall(
-                x=waterfall_labels,
-                measure=['relative'] * len(categories) + ['total'],
-                y=waterfall_values,
-                text=[f"{value:,.0f}" for value in waterfall_values],
-                textposition="outside",
-                connector={"line": {"color": "rgb(63, 63, 63)"}},
-            increasing={"marker": {"color": '#0077b6'}},
-            decreasing={"marker": {"color": '#0077b6'}},
-            totals={"marker": {"color": "#ced4da"}},
-            ))
-        
-            fig_waterfall.update_layout(
-                title=f"Waterfall Chart of Admission Methods for {selected_year}",
-                width=1000, 
-                height=600,
-                plot_bgcolor='rgba(0,0,0,0)',  
-                paper_bgcolor='rgba(0,0,0,0)', 
-                xaxis=dict(
-                    showgrid=False,  
-                    zeroline=False,  
-                ),
-                yaxis=dict(
-                    showgrid=False, 
-                    zeroline=False, 
-                ),
-                showlegend=False
-            )
-        
-            st.plotly_chart(fig_waterfall, use_container_width=True)
+        # Prepare data for the waterfall chart
+        categories = filtered_data.index.tolist()
+        values = filtered_data.values.tolist()
+        bar_colors = ['#0077b6', '#0077b6', '#0077b6', '#0077b6', '#0077b6']
+        waterfall_values = [values[0]] + [values[i] for i in range(1, len(values))] + [sum(values)]
+        waterfall_labels = categories + ['Total Admissions']
+    
+        # Create the waterfall chart
+        fig_waterfall = go.Figure(go.Waterfall(
+            x=waterfall_labels,
+            measure=['relative'] * len(categories) + ['total'],
+            y=waterfall_values,
+            text=[f"{value:,.0f}" for value in waterfall_values],
+            textposition="outside",
+            connector={"line": {"color": "rgb(63, 63, 63)"}},
+        increasing={"marker": {"color": '#0077b6'}},
+        decreasing={"marker": {"color": '#0077b6'}},
+        totals={"marker": {"color": "#ced4da"}},
+        ))
+    
+        fig_waterfall.update_layout(
+            title=f"Waterfall Chart of Admission Methods for {selected_year}",
+            width=1000, 
+            height=600,
+            plot_bgcolor='rgba(0,0,0,0)',  
+            paper_bgcolor='rgba(0,0,0,0)', 
+            xaxis=dict(
+                showgrid=False,  
+                zeroline=False,  
+            ),
+            yaxis=dict(
+                showgrid=False, 
+                zeroline=False, 
+            ),
+            showlegend=False
+        )
+    
+        st.plotly_chart(fig_waterfall, use_container_width=True)
 
 ############## Function to be able to print the SiriusPoint logo ###########################################
 def get_base64_of_bin_file(bin_file):
     with open(bin_file, 'rb') as f:
         data = f.read()
     return base64.b64encode(data).decode()
+
 
 ################ logo and Background #################
 logo_image_path = "siriuspt_logo.jpg"
