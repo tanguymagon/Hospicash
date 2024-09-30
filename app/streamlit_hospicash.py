@@ -8,7 +8,7 @@ import geopandas as gpd
 import plotly.io as pio
 import requests
 import plotly.graph_objects as go
-
+import io
 pio.renderers.default = 'iframe'
 # User_ID defined - so that when import a file, the path can be changed dynamically. 
 user_id = 'chtam'
